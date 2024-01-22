@@ -1,0 +1,7 @@
+<resources>
+    <string name="authentication_scan">請掃碼驗證</string>
+    <string name="authentication_sn">SN</string>
+    <string name="authentication_bring">生成驗證碼</string>
+    <string name="authentication_regeneration">重新生成</string>
+    <string name="sn_text">SN: %s</string>
+</resources>
