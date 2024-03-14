@@ -15,8 +15,7 @@ import androidx.recyclerview.widget.RecyclerView
  *Describe:
  */
 class MediaPlayerAdapter (
-    private val data: List<String>?,
-    private val index: Int
+    private val data: List<String?>
 ) : RecyclerView.Adapter<MediaPlayerAdapter.ViewHolder>() {
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val itemView = LayoutInflater.from(parent.context)
@@ -26,9 +25,9 @@ class MediaPlayerAdapter (
 
     @SuppressLint("SetTextI18n")
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = data?.get(position)
+        val item = data[position]
         holder.title?.text = item
-        if (position == index) {
+        if (position == selectedIndex) {
             holder.itemView.setBackgroundColor(Color.parseColor("#CCCCCC"))
         } else {
             holder.itemView.setBackgroundColor(Color.parseColor("#f9f9f9"))
@@ -36,11 +35,19 @@ class MediaPlayerAdapter (
     }
 
     override fun getItemCount(): Int {
-        return data?.size!!
+        return data.size
     }
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         var title: TextView? = itemView.findViewById<View>(
             R.id.title) as TextView
     }
+
+    private var selectedIndex: Int = 0
+
+    fun setSelectedIndex(position: Int) {
+        selectedIndex = position
+        notifyDataSetChanged()
+    }
+
 }

@@ -1,11 +1,14 @@
 package com.heyday.media_player
+
 import android.annotation.SuppressLint
 import android.content.*
 import android.net.Uri
+import android.opengl.Visibility
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
@@ -13,12 +16,12 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.chenliee.library.Global
-import com.chenliee.library.utils.OkHttpUtil
 import com.facebook.stetho.Stetho
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.heyday.media_player.demo.MediaObserve
+import com.heyday.pos.mylibrary.service_package.ServiceGlobal
+import com.heyday.pos.mylibrary.service_package.util.RSAUtil
+import com.heyday.pos.mylibrary.service_package.util.RabbitMqManager
+import com.heyday.pos.mylibrary.storage.http.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -35,20 +38,26 @@ import java.util.*
 class MainActivity : AppCompatActivity(),
     View.OnClickListener {
     private var listView: RecyclerView? = null
-    private var index = 0
     private lateinit var context: Context
     private lateinit var snView: TextView
+    private lateinit var serviceSnView: TextView
+    private lateinit var brandCode: TextView
+    private lateinit var emptyView: TextView
     private lateinit var play: ImageView
     private lateinit var next: ImageView
     private lateinit var adapter: MediaPlayerAdapter
-    private lateinit var audioList: List<Uri>
+    private lateinit var nameList: List<String?>
     private var musicService: MusicService? = null
     private var musicServiceBound = false
 
     private val connection = object :
         ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as MusicService.MusicBinder
+        override fun onServiceConnected(
+            name: ComponentName?,
+            service: IBinder?
+        ) {
+            val binder =
+                    service as MusicService.MusicBinder
             musicService = binder.getService()
             musicServiceBound = true
             // 在这里获取音乐播放状态并决定是否播放音乐
@@ -63,35 +72,48 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-    private val playNextReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val songIndex = intent?.getIntExtra("songIndex", 0)
-            for (i in 0 until listView!!.childCount) {
-                val previousSelectedItem =
-                        listView!!.getChildAt(
-                            i
-                        )
-                if (i == songIndex) {
-                    previousSelectedItem?.setBackgroundColor(
-                        resources.getColor(
-                            R.color.gray
-                        )
-                    )
-                } else {
-                    previousSelectedItem?.setBackgroundColor(
-                        resources.getColor(
-                            R.color.backGround
-                        )
-                    )
+    private val playNextReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context?,
+                    intent: Intent?
+                ) {
+                    val songIndex =
+                            intent?.getIntExtra(
+                                "songIndex",
+                                0
+                            )
+                    for (i in 0 until listView!!.childCount) {
+                        val previousSelectedItem =
+                                listView!!.getChildAt(
+                                    i
+                                )
+                        if (i == songIndex) {
+                            previousSelectedItem?.setBackgroundColor(
+                                resources.getColor(
+                                    R.color.gray
+                                )
+                            )
+                        } else {
+                            previousSelectedItem?.setBackgroundColor(
+                                resources.getColor(
+                                    R.color.backGround
+                                )
+                            )
+                        }
+                    }
                 }
             }
-        }
-    }
 
     override fun onStart() {
         super.onStart()
-        val serviceIntent = Intent(this, MusicService::class.java)
-        bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+        val serviceIntent =
+                Intent(this, MusicService::class.java)
+        bindService(
+            serviceIntent,
+            connection,
+            Context.BIND_AUTO_CREATE
+        )
         val filter = IntentFilter("ACTION_PLAY_NEXT")
         registerReceiver(playNextReceiver, filter)
     }
@@ -114,103 +136,68 @@ class MainActivity : AppCompatActivity(),
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         context = this
-        window.setFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS, WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
         Stetho.initializeWithDefaults(this)
-        Global.initBaseUrl(
-            devUrl = "https://gateway.dev.heyday-catering.com:20443",
-            uatUrl = "https://storage.uat.heyday-catering.com",
-            proUrl = "https://storage.heyday-catering.com",
-        )
+
         CoroutineScope(Dispatchers.IO).launch {
-            val sn = getSN(context)
-            val response = OkHttpUtil.getInstance().getJson("/swiper/public/config.json")
-            val jsonObject = Gson().fromJson(
-                response,
-                JsonObject::class.java
-            )
+            val sn = RSAUtil().getSN(context)
+            val deferred = MediaPlayerManager.getAudioList(context)
 
-            val branch =
-                    jsonObject.getAsJsonObject("device")
-                        .get(sn)
-            if (branch != null) {
-                val playlistArray =
-                        jsonObject.getAsJsonObject("playlist")
-                            .getAsJsonArray(branch.asString)
-                val audioFileNameList =
-                        mutableListOf<String>()
-                val list = mutableListOf<Uri>()
-                for (resourceId in playlistArray) {
-                    audioFileNameList.add(
-                        resourceId.asString.split(
-                            "_"
-                        )[1]
-                    )
-                    val uriString =
-                            "${OkHttpUtil.getBaseUrl()}/swiper/public/" + resourceId.asString
-                    list.add(Uri.parse(uriString))
-                }
+            nameList = deferred.map { it.name }
+            if(nameList.isEmpty()) {
+                emptyView = findViewById(R.id.empty)
+                emptyView.visibility = View.VISIBLE
+            }
+            launch(Dispatchers.Main) {
+                adapter = MediaPlayerAdapter(
+                    nameList,
+                )
+                listView =
+                        findViewById<View>(R.id.recyclerView) as RecyclerView
+                listView!!.layoutManager =
+                        LinearLayoutManager(context)
+                listView!!.adapter = adapter
 
-                audioList = list.toList()
-                launch(Dispatchers.Main) {
-                    adapter = MediaPlayerAdapter(
-                        audioFileNameList,
-                        index
-                    )
-                    listView =
-                            findViewById<View>(R.id.recyclerView) as RecyclerView
-                    listView!!.layoutManager =
-                            LinearLayoutManager(context)
-                    listView!!.adapter = adapter
+                listView!!.addOnItemTouchListener(
+                    RecyclerView.SimpleOnItemTouchListener()
+                )
 
-                    listView!!.addOnItemTouchListener(
-                        RecyclerView.SimpleOnItemTouchListener()
-                    )
-
-                    listView!!.addOnItemTouchListener(
-                        RecyclerItemClickListener(
-                            context,
-                            listView!!,
-                            object :
-                                RecyclerItemClickListener.OnItemClickListener {
-                                override fun onItemClick(
-                                    view: View,
-                                    position: Int
-                                ) {
-                                    if (index != -1) {
-                                        val previousSelectedItem =
-                                                listView!!.getChildAt(
-                                                    index
-                                                )
-                                        previousSelectedItem?.setBackgroundColor(
-                                            resources.getColor(
-                                                R.color.backGround
-                                            )
-                                        )
-                                    }
-                                    view.setBackgroundColor(
-                                        resources.getColor(
-                                            R.color.gray
-                                        )
-                                    )
-                                    index = position
-                                    if (musicServiceBound) {
-                                        musicService?.onclick(index)
-                                    }
+                listView!!.addOnItemTouchListener(
+                    RecyclerItemClickListener(
+                        context,
+                        listView!!,
+                        object :
+                            RecyclerItemClickListener.OnItemClickListener {
+                            override fun onItemClick(
+                                view: View,
+                                position: Int
+                            ) {
+                                adapter.setSelectedIndex(position)
+                                if (musicServiceBound) {
+                                    musicService?.onclick(position)
                                 }
-                                override fun onLongItemClick(
-                                    view: View,
-                                    position: Int
-                                ) {
-                                    // 处理 item 长按事件
-                                }
-                            })
-                    )
+                            }
 
-                }
+                            override fun onLongItemClick(
+                                view: View,
+                                position: Int
+                            ) {
+                                // 处理 item 长按事件
+                            }
+                        })
+                )
+
             }
             launch(Dispatchers.Main) {
                 snView = findViewById(R.id.sn)
                 snView.text = "设备SN: $sn"
+                serviceSnView =
+                        findViewById(R.id.service_sn)
+                serviceSnView.text =
+                        "服務SN: ${RabbitMqManager.Global.sn}"
+                brandCode =
+                        findViewById(R.id.brand_code)
+                brandCode.text =
+                        "門店代號: ${ServiceGlobal.brand}"
             }
         }
 
@@ -222,13 +209,15 @@ class MainActivity : AppCompatActivity(),
             MusicService::class.java
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
+            context.startForegroundService(
+                serviceIntent
+            )
         } else {
             context.startService(serviceIntent)
         }
     }
 
-    private fun pauseMusic() : Boolean?{
+    private fun pauseMusic(): Boolean? {
         return if (musicServiceBound) {
             musicService?.pauseMusic()
         } else {
@@ -239,24 +228,20 @@ class MainActivity : AppCompatActivity(),
     override fun onClick(v: View?) {
         when (v!!.id) {
             R.id.play -> {
-                val mMovieLoader = MediaObserve()
-                mMovieLoader.getMusic(brand="123")
+                if(nameList.isEmpty()) {
+                    return
+                }
+                if (musicService?.isMusicPlaying() == true) {
+                    play.setImageResource(R.drawable.ic_baseline_play_arrow_24)
+                } else {
+                    play.setImageResource(R.drawable.ic_baseline_pause_24)
+                }
+                pauseMusic()
             }
             else -> {
-                val mMovieLoader = MediaObserve()
-                mMovieLoader.getMusic(brand="123")
+
             }
         }
-    }
-
-    @SuppressLint("HardwareIds")
-    fun getSN(context: Context): String? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ANDROID_ID
-            )
-        } else Build.SERIAL
     }
 
 }

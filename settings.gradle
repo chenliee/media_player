@@ -17,4 +17,5 @@ include ':app'
 include ':library'
 project(':library').projectDir = new File("../CommonLibrary", "library")
 
-
+include ':service'
+project(':service').projectDir = new File("../pos", "service")

@@ -1,6 +1,10 @@
 package com.heyday.media_player
 
+import android.content.Context
 import android.media.MediaPlayer
+import com.heyday.pos.mylibrary.service_package.ServiceGlobal
+import com.heyday.pos.mylibrary.storage.http.File
+import com.heyday.pos.mylibrary.storage.model.FileModel
 
 /**
  *@Author：chenliee
@@ -9,6 +13,7 @@ import android.media.MediaPlayer
  */
 object MediaPlayerManager {
     private var mediaPlayer: MediaPlayer? = null
+    var audioList: List<FileModel>? = null
 
     fun getMediaPlayer(): MediaPlayer {
         if (mediaPlayer == null) {
@@ -21,4 +26,20 @@ object MediaPlayerManager {
         mediaPlayer?.release()
         mediaPlayer = null
     }
+
+    suspend fun getAudioList(context: Context) : List<FileModel> {
+        if(audioList == null) {
+             val deferred = File().getFile(
+                context = context,
+                path = "meida-branch/${ServiceGlobal.brand}",
+                project = "swiper"
+            )
+            if(deferred != null) {
+                audioList =
+                        deferred
+            }
+        }
+        return audioList!!
+    }
+
 }
