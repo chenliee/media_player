@@ -9,7 +9,6 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -20,6 +19,7 @@ import com.heyday.pos.mylibrary.iam.http.Login
 import com.heyday.pos.mylibrary.notify.http.Channel
 import com.heyday.pos.mylibrary.service_package.ServiceGlobal
 import com.heyday.pos.mylibrary.service_package.util.*
+import com.heyday.pos.mylibrary.service_package.widget.DelayedProgressDialog
 import com.heyday.pos.mylibrary.storage.http.File
 import kotlinx.coroutines.*
 import java.security.KeyFactory
@@ -32,6 +32,7 @@ class MusicService : Service() {
     private lateinit var context: Context
     private var index = 0
     private var audioList: List<String>? = null
+    private var mediaPlayerPrepared: Boolean = false
 
     companion object {
         private const val NOTIFICATION_ID =
@@ -56,33 +57,40 @@ class MusicService : Service() {
             if (deferred != null) {
                 audioList =
                         deferred.map { it.url!! }
-                launch(Dispatchers.Main) {
-                    if(!audioList.isNullOrEmpty()) {
-                        mediaPlayer = MediaPlayer()
-                        mediaPlayer?.setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setContentType(
-                                    AudioAttributes.CONTENT_TYPE_MUSIC
-                                )
-                                .build()
-                        )
-                        mediaPlayer?.setDataSource(
-                            audioList!![index]
-                        )
-                        mediaPlayer?.prepare()
+
+                if (!audioList.isNullOrEmpty()) {
+                    mediaPlayer = MediaPlayer()
+                    mediaPlayer?.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(
+                                AudioAttributes.CONTENT_TYPE_MUSIC
+                            )
+                            .build()
+                    )
+                    mediaPlayer?.reset()
+                    mediaPlayer?.setDataSource(
+                        audioList!![index]
+                    )
+                    mediaPlayer?.prepareAsync() // 使用 prepareAsync() 方法
+                    // 监听音频准备完成事件
+                    mediaPlayer?.setOnPreparedListener {
+                        // 在准备完成后开始播放
                         mediaPlayer?.start()
-                        // 监听音频播放完成事件
-                        mediaPlayer?.setOnCompletionListener {
-                            playNextAudio()
-                        }
+                        mediaPlayerPrepared = true
+                    }
+                    // 监听音频播放完成事件
+                    mediaPlayer?.setOnCompletionListener {
+                        playNextAudio()
                     }
                 }
+
             }
         }
     }
 
     private fun playNextAudio() {
         // 停止并释放当前的MediaPlayer
+        mediaPlayerPrepared = false
         mediaPlayer?.release()
         mediaPlayer = null
         index = (index + 1) % audioList!!.size
@@ -97,17 +105,21 @@ class MusicService : Service() {
                 )
                 .build()
         )
+        mediaPlayer?.reset()
         mediaPlayer?.setDataSource(
             audioList!![index]
         )
-        mediaPlayer?.prepare()
-
+        mediaPlayer?.prepareAsync() // 使用 prepareAsync() 方法
+        // 监听音频准备完成事件
+        mediaPlayer?.setOnPreparedListener {
+            // 在准备完成后开始播放
+            mediaPlayer?.start()
+            mediaPlayerPrepared = true
+        }
         // 监听音频播放完成事件
         mediaPlayer?.setOnCompletionListener {
             playNextAudio()
         }
-        // 开始播放下一个音频
-        mediaPlayer?.start()
     }
 
     override fun onStartCommand(
@@ -140,52 +152,65 @@ class MusicService : Service() {
         return mediaPlayer?.isPlaying ?: false
     }
 
-    fun pauseMusic(): Boolean {
-        return if (mediaPlayer?.isPlaying == true) {
+    fun pauseMusic(): Boolean? {
+        return if (mediaPlayer?.isPlaying == true && mediaPlayerPrepared) {
+            Log.e("????","暂停")
             mediaPlayer?.pause()
             true
-        } else {
+        } else if (mediaPlayer?.isPlaying != true && mediaPlayerPrepared) {
+            Log.e("????","播放")
             mediaPlayer?.start()
             false
+        } else {
+            null
         }
     }
 
     fun onclick(index: Int) {
-            CoroutineScope(Dispatchers.IO).launch {
-                if(audioList == null) {
-                    val deferred = File().getFile(
-                        context = context,
-                        path = "meida-branch/${ServiceGlobal.brand}",
-                        project = "swiper"
-                    )
-                    if (deferred != null) {
-                        audioList =
-                                deferred.map { it.url!! }
-                    }
-                }
-                CoroutineScope(Dispatchers.Main).launch {
-                    mediaPlayer?.release()
-                    mediaPlayer = null
-                    mediaPlayer = MediaPlayer()
-                    mediaPlayer?.setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setContentType(
-                                AudioAttributes.CONTENT_TYPE_MUSIC
-                            )
-                            .build()
-                    )
-                    mediaPlayer?.setDataSource(
-                        audioList!![index]
-                    )
-                    mediaPlayer?.prepare()
-                    // 监听音频播放完成事件
-                    mediaPlayer?.setOnCompletionListener {
-                        playNextAudio()
-                    }
-
-                    mediaPlayer?.start()
+        CoroutineScope(Dispatchers.IO).launch {
+            val isPlay = isMusicPlaying()
+            mediaPlayerPrepared = false
+            if (audioList == null) {
+                val deferred = File().getFile(
+                    context = context,
+                    path = "meida-branch/${ServiceGlobal.brand}",
+                    project = "swiper"
+                )
+                if (deferred != null) {
+                    audioList =
+                            deferred.map { it.url!! }
                 }
             }
+
+            mediaPlayer?.release()
+            mediaPlayer = null
+            mediaPlayer = MediaPlayer()
+            mediaPlayer?.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(
+                        AudioAttributes.CONTENT_TYPE_MUSIC
+                    )
+                    .build()
+            )
+            mediaPlayer?.reset()
+            mediaPlayer?.setDataSource(
+                audioList!![index]
+            )
+            mediaPlayer?.prepareAsync() // 使用 prepareAsync() 方法
+            // 监听音频准备完成事件
+            mediaPlayer?.setOnPreparedListener {
+                // 在准备完成后开始播放
+                if(isPlay) {
+                    mediaPlayer?.start()
+                }
+                mediaPlayerPrepared = true
+            }
+            // 监听音频播放完成事件
+            mediaPlayer?.setOnCompletionListener {
+                playNextAudio()
+            }
+
+        }
     }
 
     private fun createNotification(): Notification {
@@ -211,7 +236,7 @@ class MusicService : Service() {
             this,
             0,
             notificationIntent,
-            0
+            PendingIntent.FLAG_IMMUTABLE
         )
 
         return NotificationCompat.Builder(
@@ -236,104 +261,110 @@ class MusicService : Service() {
         val cursor: Cursor = db.rawQuery(query, null)
         try {
 
-                if (cursor.moveToFirst()) {
-                    val sn = cursor.getString(
-                        cursor.getColumnIndex("sn")
-                    )
-                    val privateKeyString =
-                            cursor.getString(
-                                cursor.getColumnIndex("private_key")
+            if (cursor.moveToFirst()) {
+                val sn = cursor.getString(
+                    cursor.getColumnIndex("sn")
+                )
+                val privateKeyString =
+                        cursor.getString(
+                            cursor.getColumnIndex("private_key")
+                        )
+                val deferred =
+                        Channel().deviceRegistration(
+                            cid = "media",
+                            pac = "com.heyday.media_player",
+                            token = sn,
+                            context = context
+                        )
+                val privateKey: PrivateKey =
+                        KeyFactory.getInstance(
+                            "RSA"
+                        ).generatePrivate(
+                            PKCS8EncodedKeySpec(
+                                Base64.decode(
+                                    privateKeyString,
+                                    Base64.DEFAULT
+                                )
                             )
-                    val deferred =
-                            Channel().deviceRegistration(
-                                cid = "media",
-                                pac = "com.heyday.media_player",
-                                token = sn,
+                        )
+                if (deferred != null) {
+                    val signData =
+                            RSAUtil().signData(
+                                deferred,
+                                privateKey
+                            ).replace("\n", "")
+                    val res = Channel().deviceBinding(
+                        pac = "com.heyday.media_player",
+                        cid = "media",
+                        token = sn,
+                        uuid = deferred,
+                        code = signData,
+                        context = context
+                    )
+                    ServiceGlobal.initToken(
+                        uid = "",
+                        token = res?.get("token")!!
+                    )
+                    val device =
+                            Channel().getDevice(
+                                context
+                            )
+                    Log.e("device", device.toString())
+                    ServiceGlobal.brand =
+                            device?.meta?.brand
+                                ?: ""
+                    val de =
+                            Login().authLogin(
+                                token = res["token"],
+                                provider = "media",
                                 context = context
                             )
-                    val privateKey: PrivateKey =
-                            KeyFactory.getInstance(
-                                "RSA"
-                            ).generatePrivate(
-                                PKCS8EncodedKeySpec(
-                                    Base64.decode(
-                                        privateKeyString,
-                                        Base64.DEFAULT
-                                    )
-                                )
-                            )
-                    if (deferred != null) {
-                        val signData =
-                                RSAUtil().signData(
-                                    deferred,
-                                    privateKey
-                                ).replace("\n", "")
-                        val res = Channel().deviceBinding(
-                                    pac = "com.heyday.media_player",
-                                    cid = "media",
-                                    token = sn,
-                                    uuid = deferred,
-                                    code = signData,
-                                    context = context
-                                )
+                    Log.e("token", de.toString())
+                    if (de != null) {
                         ServiceGlobal.initToken(
-                            uid = "",
-                            token = res?.get("token")!!
+                            uid = de.data!!.uid,
+                            token = de.data!!.token
                         )
-                        val device =
-                                Channel().getDevice(
-                                    context
+                    }
+                    val jwt =
+                            res["token"]?.let {
+                                JWTUtil().jwt(
+                                    it
                                 )
-                        ServiceGlobal.brand =
-                                device?.meta?.brand
-                                    ?: ""
-                        val de =
-                                Login().authLogin(
-                                    token = res["token"],
-                                    provider = "media",
-                                    context = context
-                                )
-                        if (de != null) {
-                            ServiceGlobal.initToken(
-                                uid = de.data!!.uid,
-                                token = de.data!!.token
+                            }
+                    if (!res["token"]?.isEmpty()!!) {
+                        RabbitMqManager.Global.sn =
+                                res["sn"]!!
+                        RabbitMqManager.Global.token =
+                                res["token"]!!
+                        RabbitMqManager.Global.url =
+                                (jwt?.get("url") as String?)!!
+                        RabbitMqManager.Global.routingKey =
+                                (jwt?.get("routingKey") as String?)!!
+                        RabbitMqManager.Global.queueName =
+                                (jwt?.get("queueName") as String?)!!
+                        RabbitMqManager.Global.exchange =
+                                (jwt?.get("exchange") as String?)!!
+                        RabbitMqManager.Global.upRoutingKey =
+                                (jwt?.get("upRoutingKey")
+                                    ?: "") as String
+                        startService(
+                            Intent(
+                                context,
+                                RabbitMqService::class.java
                             )
-                        }
-                        val jwt =
-                                res["token"]?.let {
-                                    JWTUtil().jwt(
-                                        it
-                                    )
-                                }
-                        if (!res["token"]?.isEmpty()!!) {
-                            RabbitMqManager.Global.sn =
-                                    res["sn"]!!
-                            RabbitMqManager.Global.token =
-                                    res["token"]!!
-                            RabbitMqManager.Global.url =
-                                    (jwt?.get("url") as String?)!!
-                            RabbitMqManager.Global.routingKey =
-                                    (jwt?.get("routingKey") as String?)!!
-                            RabbitMqManager.Global.queueName =
-                                    (jwt?.get("queueName") as String?)!!
-                            RabbitMqManager.Global.exchange =
-                                    (jwt?.get("exchange") as String?)!!
-                            RabbitMqManager.Global.upRoutingKey =
-                                    (jwt?.get("upRoutingKey") as String?)!!
-                            startService(
-                                Intent(
-                                    context,
-                                    RabbitMqService::class.java
-                                )
-                            )
-                        }
+                        )
                     }
                 }
+            }
 
         } catch (e: Exception) {
             cursor.close()
-            ToastUtil.getInstance()
-                .showToast(context, "請聯繫it綁定設備 ")
+            Log.e("error", e.toString())
+            withContext(Dispatchers.Main) {
+                ToastUtil.getInstance()
+                    .showToast(context, "請聯繫it綁定設備 ")
+            }
         }
     }
 }

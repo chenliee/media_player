@@ -5,6 +5,9 @@ import android.media.MediaPlayer
 import com.heyday.pos.mylibrary.service_package.ServiceGlobal
 import com.heyday.pos.mylibrary.storage.http.File
 import com.heyday.pos.mylibrary.storage.model.FileModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  *@Author：chenliee
@@ -28,17 +31,19 @@ object MediaPlayerManager {
     }
 
     suspend fun getAudioList(context: Context) : List<FileModel> {
-        if(audioList == null) {
-             val deferred = File().getFile(
-                context = context,
-                path = "meida-branch/${ServiceGlobal.brand}",
-                project = "swiper"
-            )
-            if(deferred != null) {
-                audioList =
-                        deferred
+
+            if(audioList == null) {
+                val deferred = File().getFile(
+                    context = context,
+                    path = "meida-branch/${ServiceGlobal.brand}",
+                    project = "swiper"
+                )
+                if(deferred != null) {
+                    audioList =
+                            deferred
+                }
             }
-        }
+
         return audioList!!
     }
 

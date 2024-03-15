@@ -4,9 +4,7 @@ import android.annotation.SuppressLint
 import android.content.*
 import android.net.Uri
 import android.opengl.Visibility
-import android.os.Build
-import android.os.Bundle
-import android.os.IBinder
+import android.os.*
 import android.provider.Settings
 import android.util.Log
 import android.view.View
@@ -21,6 +19,7 @@ import com.heyday.media_player.demo.MediaObserve
 import com.heyday.pos.mylibrary.service_package.ServiceGlobal
 import com.heyday.pos.mylibrary.service_package.util.RSAUtil
 import com.heyday.pos.mylibrary.service_package.util.RabbitMqManager
+import com.heyday.pos.mylibrary.service_package.widget.DelayedProgressDialog
 import com.heyday.pos.mylibrary.storage.http.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -138,21 +137,31 @@ class MainActivity : AppCompatActivity(),
         context = this
         Stetho.initializeWithDefaults(this)
 
+        emptyView =
+                findViewById(R.id.empty)
+        snView = findViewById(R.id.sn)
+        serviceSnView =
+                findViewById(R.id.service_sn)
+        brandCode =
+                findViewById(R.id.brand_code)
+        listView =
+                findViewById<View>(R.id.recyclerView) as RecyclerView
+
         CoroutineScope(Dispatchers.IO).launch {
             val sn = RSAUtil().getSN(context)
-            val deferred = MediaPlayerManager.getAudioList(context)
+            val deferred =
+                    MediaPlayerManager.getAudioList(
+                        context
+                    )
 
             nameList = deferred.map { it.name }
-            if(nameList.isEmpty()) {
-                emptyView = findViewById(R.id.empty)
-                emptyView.visibility = View.VISIBLE
-            }
             launch(Dispatchers.Main) {
+                if (nameList.isEmpty()) {
+                    emptyView.visibility = View.VISIBLE
+                }
                 adapter = MediaPlayerAdapter(
                     nameList,
                 )
-                listView =
-                        findViewById<View>(R.id.recyclerView) as RecyclerView
                 listView!!.layoutManager =
                         LinearLayoutManager(context)
                 listView!!.adapter = adapter
@@ -171,9 +180,13 @@ class MainActivity : AppCompatActivity(),
                                 view: View,
                                 position: Int
                             ) {
-                                adapter.setSelectedIndex(position)
+                                adapter.setSelectedIndex(
+                                    position
+                                )
                                 if (musicServiceBound) {
-                                    musicService?.onclick(position)
+                                    musicService?.onclick(
+                                        position
+                                    )
                                 }
                             }
 
@@ -185,22 +198,13 @@ class MainActivity : AppCompatActivity(),
                             }
                         })
                 )
-
-            }
-            launch(Dispatchers.Main) {
-                snView = findViewById(R.id.sn)
                 snView.text = "设备SN: $sn"
-                serviceSnView =
-                        findViewById(R.id.service_sn)
                 serviceSnView.text =
                         "服務SN: ${RabbitMqManager.Global.sn}"
-                brandCode =
-                        findViewById(R.id.brand_code)
                 brandCode.text =
                         "門店代號: ${ServiceGlobal.brand}"
             }
         }
-
         play = findViewById(R.id.play)
         play.setOnClickListener(this)
 
@@ -228,15 +232,19 @@ class MainActivity : AppCompatActivity(),
     override fun onClick(v: View?) {
         when (v!!.id) {
             R.id.play -> {
-                if(nameList.isEmpty()) {
+                if (nameList.isEmpty()) {
                     return
                 }
-                if (musicService?.isMusicPlaying() == true) {
-                    play.setImageResource(R.drawable.ic_baseline_play_arrow_24)
-                } else {
-                    play.setImageResource(R.drawable.ic_baseline_pause_24)
+                when (pauseMusic()) {
+                    null -> Handler(Looper.getMainLooper()).post {
+                        ToastUtil.getInstance().showToast(
+                            context,
+                            "音乐资源正在加载，请稍后"
+                        )
+                    }
+                    true ->  play.setImageResource(R.drawable.ic_baseline_play_arrow_24)
+                    false -> play.setImageResource(R.drawable.ic_baseline_pause_24)
                 }
-                pauseMusic()
             }
             else -> {
 
