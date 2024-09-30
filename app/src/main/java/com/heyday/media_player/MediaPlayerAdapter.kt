@@ -27,7 +27,7 @@ class MediaPlayerAdapter (
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = data[position]
         holder.title?.text = item
-        if (position == selectedIndex) {
+        if (position == MediaPlayerManager.selectIndex) {
             holder.itemView.setBackgroundColor(Color.parseColor("#CCCCCC"))
         } else {
             holder.itemView.setBackgroundColor(Color.parseColor("#f9f9f9"))
@@ -43,10 +43,9 @@ class MediaPlayerAdapter (
             R.id.title) as TextView
     }
 
-    private var selectedIndex: Int = 0
 
     fun setSelectedIndex(position: Int) {
-        selectedIndex = position
+        MediaPlayerManager.selectIndex = position
         notifyDataSetChanged()
     }
 

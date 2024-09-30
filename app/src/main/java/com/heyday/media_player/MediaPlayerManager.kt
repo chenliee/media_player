@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
  */
 object MediaPlayerManager {
     private var mediaPlayer: MediaPlayer? = null
-    var audioList: List<FileModel>? = null
+    private var audioList: List<FileModel>? = null
+    var selectIndex: Int = 0
 
     fun getMediaPlayer(): MediaPlayer {
         if (mediaPlayer == null) {

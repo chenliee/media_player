@@ -22,18 +22,20 @@ class MediaObserve: CommonObserve() {
                         MusicService::class.java
                     )
     }
-
-
-    fun getMusic(brand :String): Disposable {
+    
+    
+    fun getMusic(brand: String, onDataReceived: (MediaModel) -> Unit): Disposable {
         return observe(
-            musicService!!.getMusic(project = "heyday", queryParams = mapOf(
-                "path" to "public/$brand",
-                "project" to "swiper",
-                "ext" to ".mp3",
-            ))
-        ) { data ->
-            Log.e("123", data.toString())
-        }
+            musicService!!.getMusic(
+                project = "heyday",
+                queryParams = mapOf(
+                    "path" to "public/$brand",
+                    "project" to "swiper",
+                    "ext" to ".mp3",
+                )
+            ),
+            onDataReceived // 将传入的方法作为 observe 函数的参数
+        )
     }
 
     interface MusicService {

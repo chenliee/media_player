@@ -82,24 +82,10 @@ class MainActivity : AppCompatActivity(),
                                 "songIndex",
                                 0
                             )
-                    for (i in 0 until listView!!.childCount) {
-                        val previousSelectedItem =
-                                listView!!.getChildAt(
-                                    i
-                                )
-                        if (i == songIndex) {
-                            previousSelectedItem?.setBackgroundColor(
-                                resources.getColor(
-                                    R.color.gray
-                                )
-                            )
-                        } else {
-                            previousSelectedItem?.setBackgroundColor(
-                                resources.getColor(
-                                    R.color.backGround
-                                )
-                            )
-                        }
+                    songIndex?.let {
+                        adapter.setSelectedIndex(
+                            it
+                        )
                     }
                 }
             }

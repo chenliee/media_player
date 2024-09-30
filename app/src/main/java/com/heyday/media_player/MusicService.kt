@@ -49,11 +49,10 @@ class MusicService : Service() {
                 getToken()
             }
 
-            val deferred = File().getFile(
-                context = context,
-                path = "meida-branch/${ServiceGlobal.brand}",
-                project = "swiper"
-            )
+            val deferred =
+                    MediaPlayerManager.getAudioList(
+                        context
+                    )
             if (deferred != null) {
                 audioList =
                         deferred.map { it.url!! }
@@ -94,6 +93,7 @@ class MusicService : Service() {
         mediaPlayer?.release()
         mediaPlayer = null
         index = (index + 1) % audioList!!.size
+        Log.e("index",index.toString())
         val intent = Intent("ACTION_PLAY_NEXT")
         intent.putExtra("songIndex", index)
         sendBroadcast(intent)
@@ -169,6 +169,7 @@ class MusicService : Service() {
     fun onclick(index: Int) {
         CoroutineScope(Dispatchers.IO).launch {
             val isPlay = isMusicPlaying()
+            this@MusicService.index = index
             mediaPlayerPrepared = false
             if (audioList == null) {
                 val deferred = File().getFile(

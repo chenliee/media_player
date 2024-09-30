@@ -57,4 +57,21 @@ class DemoObserve: CommonObserve() {
                      @Body queryParams: Map<String, String>
         ): Observable<BaseResponse<Model2>>
     }
+    
+    private fun getMovieList() {
+        DemoObserve().getMovie().subscribe(object :
+            Action1<List<Movie?>?>() {
+            fun call(movies: List<Movie?>?) {
+                mMovieAdapter.setMovies(movies)
+                mMovieAdapter.notifyDataSetChanged()
+            }
+        }, object : Action1<Throwable?>() {
+            fun call(throwable: Throwable) {
+                Log.e(
+                    "TAG",
+                    "error message:" + throwable.message
+                )
+            }
+        })
+    }
 }
